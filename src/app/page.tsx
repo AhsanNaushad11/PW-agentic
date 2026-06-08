@@ -87,8 +87,8 @@ export default function Home() {
       setPhase('generating');
       setAttempt(currentAttempt);
       addLog('info', currentAttempt === 1
-        ? 'Sending test case to Ollama (kimi-k2:cloud)…'
-        : `Sending error context to Ollama for fix (attempt ${currentAttempt})…`
+        ? 'Sending test case to Google AI Studio…'
+        : `Sending error context to Google AI Studio for fix (attempt ${currentAttempt})…`
       );
 
       let generatedScript = '';

@@ -1,9 +1,8 @@
-import ollama from 'ollama';
+import { GoogleGenAI, HarmCategory, HarmBlockThreshold } from '@google/genai';
 
-const MODEL = process.env.OLLAMA_MODEL ?? 'kimi-k2:cloud';
-const OLLAMA_HOST = process.env.OLLAMA_HOST ?? 'http://localhost:11434';
-
-const client = new ollama.Ollama({ host: OLLAMA_HOST });
+const MODEL = process.env.LLM_MODEL ?? 'gemini-2.5-flash';
+// Ensure you have GEMINI_API_KEY set in your .env.local
+const ai = new GoogleGenAI({});
 
 const SYSTEM_PROMPT = `You are an expert Playwright test automation engineer.
 
@@ -18,11 +17,11 @@ RULES — follow them exactly, no exceptions:
 8. The file must be self-contained — no external helpers, no relative imports.
 9. Do NOT wrap output in triple backticks or any markdown.`;
 
-function buildMessages(
+function buildPrompt(
   testCase: string,
   url: string,
   errorContext?: string
-): ollama.Message[] {
+): string {
   const userContent = errorContext
     ? `Fix the following Playwright script that failed. 
 
@@ -45,10 +44,7 @@ TARGET URL: ${url}
 
 Output ONLY the TypeScript code.`;
 
-  return [
-    { role: 'system', content: SYSTEM_PROMPT },
-    { role: 'user', content: userContent },
-  ];
+  return userContent;
 }
 
 export async function generateScript(
@@ -56,15 +52,36 @@ export async function generateScript(
   url: string,
   errorContext?: string
 ): Promise<string> {
-  const messages = buildMessages(testCase, url, errorContext);
+  const prompt = buildPrompt(testCase, url, errorContext);
 
-  const response = await client.chat({
+  const response = await ai.models.generateContent({
     model: MODEL,
-    messages,
-    stream: false,
+    contents: prompt,
+    config: {
+      systemInstruction: SYSTEM_PROMPT,
+      temperature: 0.2, // Low temperature for code generation
+      safetySettings: [
+        {
+          category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+          threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH,
+        },
+        {
+          category: HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+          threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH,
+        },
+        {
+          category: HarmCategory.HARM_CATEGORY_HARASSMENT,
+          threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH,
+        },
+        {
+          category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
+          threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH,
+        },
+      ],
+    }
   });
 
-  let script = response.message.content.trim();
+  let script = response.text?.trim() || '';
 
   // Strip any accidental markdown fences the model might still emit
   script = script

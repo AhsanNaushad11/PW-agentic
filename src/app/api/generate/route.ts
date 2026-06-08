@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { generateScript } from '@/lib/ollama';
+import { generateScript } from '@/lib/gemini';
 
 export async function POST(req: NextRequest) {
   try {
