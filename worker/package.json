@@ -1,0 +1,21 @@
+{
+  "name": "sqa-worker",
+  "version": "1.0.0",
+  "description": "Tier 3 Worker for SQA Harness",
+  "main": "dist/worker.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/worker.js",
+    "dev": "ts-node worker.ts"
+  },
+  "dependencies": {
+    "bullmq": "^5.41.3",
+    "ioredis": "^5.5.0",
+    "playwright": "^1.50.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.3",
+    "@types/node": "^20.17.19",
+    "ts-node": "^10.9.2"
+  }
+}
