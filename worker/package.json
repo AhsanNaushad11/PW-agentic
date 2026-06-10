@@ -1,0 +1,26 @@
+{
+  "name": "sqa-worker",
+  "version": "1.0.0",
+  "description": "Standalone Node.js Worker for Playwright, OpenCV, and Gemini",
+  "main": "dist/index.js",
+  "scripts": {
+    "start": "ts-node index.ts",
+    "build": "tsc",
+    "dev": "ts-node index.ts"
+  },
+  "dependencies": {
+    "@google/genai": "^2.8.0",
+    "@u4/opencv4nodejs": "^6.5.3",
+    "bullmq": "^5.12.11",
+    "dotenv": "^16.4.5",
+    "ioredis": "^5.4.1",
+    "playwright": "^1.47.2",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.9",
+    "@types/ws": "^8.5.12",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.5.3"
+  }
+}
