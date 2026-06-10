@@ -1,9 +1,33 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { useUiStore } from '@/store/uiStore';
-import { useTranslation } from 'react-i18next';
-import '../lib/i18n';
+import { useState, useCallback } from 'react';
+import dynamic from 'next/dynamic';
+
+// Monaco editor must be client-only (no SSR)
+const MonacoEditor = dynamic(() => import('@monaco-editor/react'), {
+  ssr: false,
+  loading: () => (
+    <div style={styles.editorPlaceholder}>Loading editor...</div>
+  ),
+});
+
+// ─── Types ──────────────────────────────────────────────────────────────────
+
+type Phase =
+  | 'idle'
+  | 'generating'
+  | 'executing'
+  | 'fixing'
+  | 'success'
+  | 'failed';
+
+interface LogEntry {
+  time: string;
+  type: 'info' | 'success' | 'error' | 'warn';
+  message: string;
+}
+
+const MAX_RETRIES = 3;
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -11,241 +35,445 @@ function timestamp() {
   return new Date().toLocaleTimeString('en-US', { hour12: false });
 }
 
+function phaseLabel(phase: Phase, attempt: number): string {
+  switch (phase) {
+    case 'idle': return 'Ready';
+    case 'generating': return attempt === 1 ? 'Generating script…' : `Fix attempt ${attempt - 1} — Generating…`;
+    case 'executing': return `Executing (attempt ${attempt})…`;
+    case 'fixing': return `Fixing — attempt ${attempt} of ${MAX_RETRIES}…`;
+    case 'success': return '✅ Passed';
+    case 'failed': return '❌ Could not fix after max retries';
+    default: return '';
+  }
+}
+
+function phaseColor(phase: Phase): string {
+  switch (phase) {
+    case 'success': return '#22c55e';
+    case 'failed': return '#ef4444';
+    case 'executing': return '#f59e0b';
+    default: return '#7c6af7';
+  }
+}
+
 // ─── Main Component ──────────────────────────────────────────────────────────
 
 export default function Home() {
-  const { t } = useTranslation();
-  const {
-    wsConnected,
-    logs,
-    workerState,
-    activeJobId,
-    setWsConnected,
-    addLog,
-    updateWorkerState,
-    setActiveJobId,
-    clearLogs,
-  } = useUiStore();
-
+  const [testCase, setTestCase] = useState('');
   const [url, setUrl] = useState('');
-  const [mode, setMode] = useState('fixture_driven');
-  const [totalRounds, setTotalRounds] = useState(10);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [screenshotBase64, setScreenshotBase64] = useState<string | null>(null);
-  
-  const wsRef = useRef<WebSocket | null>(null);
+  const [script, setScript] = useState('// Generated script will appear here…');
+  const [phase, setPhase] = useState<Phase>('idle');
+  const [attempt, setAttempt] = useState(0);
+  const [logs, setLogs] = useState<LogEntry[]>([]);
+  const [consoleOpen, setConsoleOpen] = useState(true);
 
-  useEffect(() => {
-    // Connect to Tier 3 Worker WebSocket
-    const connectWs = () => {
-      const ws = new WebSocket('ws://localhost:5000');
-      
-      ws.onopen = () => {
-        setWsConnected(true);
-        addLog('success', 'Connected to Worker WebSocket.');
-      };
-
-      ws.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          
-          if (data.type === 'log') {
-            addLog(data.level, data.message);
-          } else if (data.type === 'ping') {
-            updateWorkerState({ lastPing: Date.now() });
-            ws.send(JSON.stringify({ type: 'pong' }));
-          } else if (data.type === 'status') {
-            updateWorkerState({ status: data.status, memoryUsageMb: data.memoryUsageMb });
-          } else if (data.type === 'screenshot') {
-            setScreenshotBase64(data.base64);
-          }
-        } catch (e) {
-          console.error('Failed to parse WS message:', e);
-        }
-      };
-
-      ws.onclose = () => {
-        setWsConnected(false);
-        addLog('error', 'Disconnected from Worker WebSocket. Retrying in 5s...');
-        setTimeout(connectWs, 5000);
-      };
-
-      wsRef.current = ws;
-    };
-
-    connectWs();
-
-    return () => {
-      if (wsRef.current) {
-        wsRef.current.close();
-      }
-    };
-  }, [setWsConnected, addLog, updateWorkerState]);
+  const addLog = useCallback((type: LogEntry['type'], message: string) => {
+    setLogs((prev) => [...prev, { time: timestamp(), type, message }]);
+  }, []);
 
   const handleRun = useCallback(async () => {
-    if (!url.trim()) return;
+    if (!testCase.trim() || !url.trim()) return;
 
-    setIsSubmitting(true);
-    clearLogs();
-    setScreenshotBase64(null);
+    setLogs([]);
+    setScript('');
+    setPhase('generating');
+    setAttempt(1);
 
-    addLog('info', 'Submitting job to Queue (Tier 2)...');
+    let currentAttempt = 1;
+    let errorContext: string | undefined = undefined;
 
-    try {
-      const res = await fetch('/api/jobs', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          targetUrl: url,
-          mode,
-          config: {
-            totalRounds,
-            lowBalanceHaltThreshold: 1.0,
-            timing: { roundIntervalMs: 5000, visibilityWindowMs: 2500 }
-          }
-        }),
-      });
+    while (currentAttempt <= MAX_RETRIES) {
+      // ── Step 1: Generate ─────────────────────────────────────────────────
+      setPhase('generating');
+      setAttempt(currentAttempt);
+      addLog('info', currentAttempt === 1
+        ? 'Sending test case to Google AI Studio…'
+        : `Sending error context to Google AI Studio for fix (attempt ${currentAttempt})…`
+      );
 
-      const data = await res.json();
-      
-      if (!res.ok) throw new Error(data.error || 'Failed to submit job');
-      
-      setActiveJobId(data.jobId);
-      addLog('success', `Job successfully queued: ${data.jobId}`);
-    } catch (err: any) {
-      addLog('error', `Submission error: ${err.message}`);
-    } finally {
-      setIsSubmitting(false);
+      let generatedScript = '';
+      try {
+        const genRes = await fetch('/api/generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ testCase, url, errorContext }),
+        });
+        const genData = await genRes.json();
+        if (!genRes.ok || genData.error) throw new Error(genData.error ?? 'Generation failed');
+        generatedScript = genData.script;
+        setScript(generatedScript);
+        addLog('info', `Script generated (${generatedScript.split('\n').length} lines).`);
+      } catch (err) {
+        addLog('error', `Generation error: ${err instanceof Error ? err.message : err}`);
+        setPhase('failed');
+        return;
+      }
+
+      // ── Step 2: Execute ──────────────────────────────────────────────────
+      setPhase('executing');
+      addLog('info', 'Executing script with Playwright…');
+
+      try {
+        const execRes = await fetch('/api/execute', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ script: generatedScript }),
+        });
+        const execData = await execRes.json();
+
+        if (execData.success) {
+          addLog('success', `✅ Test passed in ${execData.durationMs}ms.`);
+          if (execData.output) addLog('info', execData.output);
+          setPhase('success');
+          return;
+        } else {
+          addLog('error', `❌ Test failed (attempt ${currentAttempt}/${MAX_RETRIES}).`);
+          if (execData.error) addLog('warn', execData.error);
+          errorContext = execData.error ?? execData.output;
+        }
+      } catch (err) {
+        addLog('error', `Execution error: ${err instanceof Error ? err.message : err}`);
+        errorContext = err instanceof Error ? err.message : String(err);
+      }
+
+      // ── Step 3: Retry or give up ─────────────────────────────────────────
+      if (currentAttempt < MAX_RETRIES) {
+        setPhase('fixing');
+        addLog('warn', `Retrying with error context… (attempt ${currentAttempt + 1}/${MAX_RETRIES})`);
+        currentAttempt++;
+      } else {
+        addLog('error', `Gave up after ${MAX_RETRIES} attempts. Check script manually.`);
+        setPhase('failed');
+        return;
+      }
     }
-  }, [url, mode, totalRounds, addLog, clearLogs, setActiveJobId]);
+  }, [testCase, url, addLog]);
+
+  const isRunning = ['generating', 'executing', 'fixing'].includes(phase);
 
   return (
-    <div className="flex flex-col h-screen bg-gray-900 text-gray-100 font-sans overflow-hidden">
+    <div style={styles.root}>
       {/* ── Header ──────────────────────────────────────────────────────── */}
-      <header className="flex items-center justify-between px-6 py-3 bg-gray-800 border-b border-gray-700 shrink-0">
-        <div className="flex items-center gap-3">
-          <span className="text-lg font-bold text-indigo-400 tracking-tight">⚡ PW Agentic</span>
-          <span className="text-xs text-gray-400 border-l border-gray-600 pl-3">Automated SQA Harness</span>
+      <header style={styles.header}>
+        <div style={styles.headerLeft}>
+          <span style={styles.logo}>⚡ PW Agentic</span>
+          <span style={styles.headerSub}>Playwright AI Script Generator</span>
         </div>
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2">
-            <div className={`w-2 h-2 rounded-full ${wsConnected ? 'bg-green-500' : 'bg-red-500'}`} />
-            <span className="text-xs text-gray-400">Worker WS: {wsConnected ? 'Connected' : 'Disconnected'}</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-gray-400">Worker RAM: {workerState.memoryUsageMb.toFixed(1)} MB</span>
-          </div>
+        <div style={styles.statusBadge(phase)}>
+          {phaseLabel(phase, attempt)}
         </div>
       </header>
 
-      {/* ── Main Layout (3 Panels) ──────────────────────────────────────── */}
-      <main className="flex flex-1 gap-1 bg-gray-700 overflow-hidden">
-        
-        {/* Left Panel: Configuration */}
-        <section className="flex-1 flex flex-col gap-4 p-4 bg-gray-900 min-w-[300px]">
-          <div className="flex items-center justify-between pb-2 border-b border-gray-800 shrink-0">
-            <span className="text-xs font-semibold text-gray-400 uppercase tracking-widest">{t('config')}</span>
+      {/* ── Main Layout ─────────────────────────────────────────────────── */}
+      <main style={styles.main}>
+        {/* Left Panel: Input */}
+        <section style={styles.panel}>
+          <div style={styles.panelHeader}>
+            <span style={styles.panelTitle}>Test Case Input</span>
           </div>
 
-          <div className="flex flex-col gap-1.5 shrink-0">
-            <label className="text-xs font-medium text-gray-400">{t('targetUrl')}</label>
+          <div style={styles.field}>
+            <label style={styles.label} htmlFor="url-input">Target URL</label>
             <input
-              className="bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-sm font-mono focus:outline-none focus:border-indigo-500 transition-colors"
+              id="url-input"
+              style={styles.input}
               type="url"
-              placeholder="https://casino.example.com/game"
+              placeholder="https://example.com"
               value={url}
               onChange={(e) => setUrl(e.target.value)}
-              disabled={isSubmitting}
+              disabled={isRunning}
             />
           </div>
 
-          <div className="flex flex-col gap-1.5 shrink-0">
-            <label className="text-xs font-medium text-gray-400">{t('executionMode')}</label>
-            <select
-              className="bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-sm focus:outline-none focus:border-indigo-500 transition-colors"
-              value={mode}
-              onChange={(e) => setMode(e.target.value)}
-              disabled={isSubmitting}
-            >
-              <option value="fixture_driven">{t('fixtureDriven')}</option>
-              <option value="autonomous_learning">{t('autonomousLearning')}</option>
-            </select>
-          </div>
-
-          <div className="flex flex-col gap-1.5 shrink-0">
-            <label className="text-xs font-medium text-gray-400">{t('totalRounds')}</label>
-            <input
-              className="bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-sm font-mono focus:outline-none focus:border-indigo-500 transition-colors"
-              type="number"
-              min="1"
-              value={totalRounds}
-              onChange={(e) => setTotalRounds(parseInt(e.target.value, 10) || 1)}
-              disabled={isSubmitting}
+          <div style={{ ...styles.field, flex: 1, display: 'flex', flexDirection: 'column' }}>
+            <label style={styles.label} htmlFor="test-case-input">Test Case (natural language)</label>
+            <textarea
+              id="test-case-input"
+              style={styles.textarea}
+              placeholder={`Describe what to test in plain English.\n\nExamples:\n• Verify the page title contains "Example"\n• Click the login button, enter valid credentials, and verify the dashboard loads\n• Fill the contact form and confirm the success message appears`}
+              value={testCase}
+              onChange={(e) => setTestCase(e.target.value)}
+              disabled={isRunning}
             />
           </div>
 
           <button
-            className={`mt-auto px-5 py-3 rounded-md text-sm font-semibold flex items-center justify-center gap-2 transition-colors shrink-0
-              ${(!url.trim() || isSubmitting) ? 'bg-gray-800 text-gray-500 cursor-not-allowed' : 'bg-indigo-600 text-white hover:bg-indigo-500'}`}
+            id="run-button"
+            style={styles.runButton(isRunning || !testCase.trim() || !url.trim())}
             onClick={handleRun}
-            disabled={!url.trim() || isSubmitting}
+            disabled={isRunning || !testCase.trim() || !url.trim()}
           >
-            {isSubmitting ? t('queuing') : `▶ ${t('enqueueJob')}`}
+            {isRunning ? (
+              <><span style={styles.spinner} /> Running…</>
+            ) : (
+              '▶ Generate & Run'
+            )}
           </button>
         </section>
 
-        {/* Middle Panel: Real-time Logs */}
-        <section className="flex-[1.5] flex flex-col p-4 bg-gray-900 overflow-hidden">
-          <div className="flex items-center justify-between pb-2 border-b border-gray-800 shrink-0">
-            <span className="text-xs font-semibold text-gray-400 uppercase tracking-widest">Execution Logs</span>
-            <span className="text-xs text-gray-500">Job: {activeJobId || 'None'}</span>
+        {/* Right Panel: Script Editor + Console */}
+        <section style={{ ...styles.panel, flex: 2 }}>
+          <div style={styles.panelHeader}>
+            <span style={styles.panelTitle}>Generated Script</span>
+            {phase === 'success' && (
+              <span style={{ color: '#22c55e', fontSize: '12px' }}>● Passing</span>
+            )}
+            {phase === 'failed' && (
+              <span style={{ color: '#ef4444', fontSize: '12px' }}>● Needs manual fix</span>
+            )}
           </div>
 
-          <div className="flex-1 overflow-y-auto mt-2 flex flex-col gap-1 font-mono text-[13px] bg-gray-800 p-3 rounded-md border border-gray-800">
-            {logs.length === 0 ? (
-              <span className="text-gray-500">Waiting for logs...</span>
-            ) : (
-              logs.map((entry, i) => (
-                <div key={i} className={`flex gap-3 leading-relaxed
-                  ${entry.type === 'success' ? 'text-green-400' : ''}
-                  ${entry.type === 'error' ? 'text-red-400' : ''}
-                  ${entry.type === 'warn' ? 'text-amber-400' : ''}
-                  ${entry.type === 'info' ? 'text-gray-300' : ''}
-                `}>
-                  <span className="text-gray-500 shrink-0 select-none">{entry.time}</span>
-                  <span className="break-words">{entry.message}</span>
-                </div>
-              ))
+          <div style={{ flex: 1, minHeight: 0, border: '1px solid var(--border)', borderRadius: '8px', overflow: 'hidden' }}>
+            <MonacoEditor
+              height="100%"
+              language="typescript"
+              theme="vs-dark"
+              value={script}
+              onChange={(val) => setScript(val ?? '')}
+              options={{
+                fontSize: 13,
+                fontFamily: 'Geist Mono, Fira Code, Cascadia Code, monospace',
+                minimap: { enabled: false },
+                scrollBeyondLastLine: false,
+                lineNumbers: 'on',
+                renderLineHighlight: 'line',
+                padding: { top: 12, bottom: 12 },
+                smoothScrolling: true,
+                cursorBlinking: 'smooth',
+              }}
+            />
+          </div>
+
+          {/* Console */}
+          <div style={styles.console}>
+            <button
+              id="console-toggle"
+              style={styles.consoleToggle}
+              onClick={() => setConsoleOpen((o) => !o)}
+            >
+              <span>{consoleOpen ? '▼' : '▶'}</span>
+              <span>Console Output</span>
+              <span style={{ marginLeft: 'auto', color: 'var(--text-muted)', fontSize: '11px' }}>
+                {logs.length} entries
+              </span>
+            </button>
+
+            {consoleOpen && (
+              <div style={styles.consoleBody}>
+                {logs.length === 0 ? (
+                  <span style={{ color: 'var(--text-muted)' }}>No output yet.</span>
+                ) : (
+                  logs.map((entry, i) => (
+                    <div key={i} style={styles.logEntry(entry.type)}>
+                      <span style={styles.logTime}>{entry.time}</span>
+                      <span>{entry.message}</span>
+                    </div>
+                  ))
+                )}
+              </div>
             )}
           </div>
         </section>
-
-        {/* Right Panel: Vision & Evidence */}
-        <section className="flex-1 flex flex-col p-4 bg-gray-900 overflow-hidden">
-          <div className="flex items-center justify-between pb-2 border-b border-gray-800 shrink-0">
-            <span className="text-xs font-semibold text-gray-400 uppercase tracking-widest">Vision / OCR Evidence</span>
-          </div>
-
-          <div className="flex-1 flex items-center justify-center mt-2 border border-dashed border-gray-700 rounded-md bg-gray-800 overflow-hidden relative">
-            {screenshotBase64 ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img 
-                src={`data:image/jpeg;base64,${screenshotBase64}`} 
-                alt="Terminal State Evidence" 
-                className="object-contain w-full h-full"
-              />
-            ) : (
-              <span className="text-gray-500 text-sm">No evidence captured yet.</span>
-            )}
-            
-            {/* Overlay Status */}
-            <div className="absolute top-2 right-2 bg-black/60 px-2 py-1 rounded text-xs text-gray-300 backdrop-blur-sm border border-gray-700">
-              Worker Status: <span className="text-white capitalize">{workerState.status}</span>
-            </div>
-          </div>
-        </section>
-
       </main>
     </div>
   );
 }
+
+// ─── Styles (inline for self-containment) ────────────────────────────────────
+
+const styles = {
+  root: {
+    display: 'flex',
+    flexDirection: 'column' as const,
+    height: '100vh',
+    background: 'var(--bg-primary)',
+    overflow: 'hidden',
+  },
+  header: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: '12px 24px',
+    background: 'var(--bg-secondary)',
+    borderBottom: '1px solid var(--border-subtle)',
+    flexShrink: 0,
+  },
+  headerLeft: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px',
+  },
+  logo: {
+    fontSize: '18px',
+    fontWeight: 700,
+    color: '#a09af7',
+    letterSpacing: '-0.5px',
+  },
+  headerSub: {
+    fontSize: '12px',
+    color: 'var(--text-muted)',
+    borderLeft: '1px solid var(--border)',
+    paddingLeft: '12px',
+  },
+  statusBadge: (phase: Phase) => ({
+    fontSize: '12px',
+    fontFamily: 'var(--font-mono)',
+    color: phaseColor(phase),
+    background: `${phaseColor(phase)}18`,
+    border: `1px solid ${phaseColor(phase)}40`,
+    borderRadius: '20px',
+    padding: '4px 12px',
+  }),
+  main: {
+    display: 'flex',
+    flex: 1,
+    gap: '1px',
+    overflow: 'hidden',
+    background: 'var(--border-subtle)',
+  },
+  panel: {
+    flex: 1,
+    display: 'flex',
+    flexDirection: 'column' as const,
+    gap: '12px',
+    padding: '16px',
+    background: 'var(--bg-primary)',
+    overflow: 'hidden',
+  },
+  panelHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingBottom: '8px',
+    borderBottom: '1px solid var(--border-subtle)',
+    flexShrink: 0,
+  },
+  panelTitle: {
+    fontSize: '11px',
+    fontWeight: 600,
+    color: 'var(--text-muted)',
+    textTransform: 'uppercase' as const,
+    letterSpacing: '1px',
+  },
+  field: {
+    display: 'flex',
+    flexDirection: 'column' as const,
+    gap: '6px',
+    flexShrink: 0,
+  },
+  label: {
+    fontSize: '12px',
+    color: 'var(--text-secondary)',
+    fontWeight: 500,
+  },
+  input: {
+    background: 'var(--bg-card)',
+    border: '1px solid var(--border)',
+    borderRadius: '6px',
+    padding: '8px 12px',
+    color: 'var(--text-primary)',
+    fontSize: '13px',
+    fontFamily: 'var(--font-mono)',
+    outline: 'none',
+    transition: 'border-color 0.15s',
+  },
+  textarea: {
+    flex: 1,
+    background: 'var(--bg-card)',
+    border: '1px solid var(--border)',
+    borderRadius: '6px',
+    padding: '10px 12px',
+    color: 'var(--text-primary)',
+    fontSize: '13px',
+    fontFamily: 'var(--font-geist-sans), system-ui, sans-serif',
+    resize: 'none' as const,
+    outline: 'none',
+    lineHeight: 1.6,
+    minHeight: '200px',
+  },
+  runButton: (disabled: boolean) => ({
+    padding: '10px 20px',
+    background: disabled ? 'var(--bg-card)' : 'var(--accent)',
+    color: disabled ? 'var(--text-muted)' : '#fff',
+    border: 'none',
+    borderRadius: '8px',
+    fontSize: '14px',
+    fontWeight: 600,
+    cursor: disabled ? 'not-allowed' : 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '8px',
+    transition: 'background 0.15s',
+    flexShrink: 0,
+  }),
+  spinner: {
+    display: 'inline-block',
+    width: '12px',
+    height: '12px',
+    border: '2px solid rgba(255,255,255,0.3)',
+    borderTopColor: '#fff',
+    borderRadius: '50%',
+    animation: 'spin 0.7s linear infinite',
+  },
+  editorPlaceholder: {
+    height: '100%',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    color: 'var(--text-muted)',
+    fontSize: '13px',
+    background: 'var(--bg-card)',
+  },
+  console: {
+    flexShrink: 0,
+    border: '1px solid var(--border)',
+    borderRadius: '8px',
+    overflow: 'hidden',
+    maxHeight: '220px',
+    display: 'flex',
+    flexDirection: 'column' as const,
+  },
+  consoleToggle: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    padding: '8px 12px',
+    background: 'var(--bg-secondary)',
+    border: 'none',
+    borderBottom: '1px solid var(--border)',
+    color: 'var(--text-secondary)',
+    fontSize: '12px',
+    fontWeight: 600,
+    cursor: 'pointer',
+    width: '100%',
+    textAlign: 'left' as const,
+    letterSpacing: '0.5px',
+  },
+  consoleBody: {
+    flex: 1,
+    overflowY: 'auto' as const,
+    padding: '8px 12px',
+    background: 'var(--bg-card)',
+    display: 'flex',
+    flexDirection: 'column' as const,
+    gap: '3px',
+    fontFamily: 'var(--font-mono)',
+    fontSize: '12px',
+  },
+  logEntry: (type: LogEntry['type']) => ({
+    display: 'flex',
+    gap: '10px',
+    color:
+      type === 'success' ? '#22c55e' :
+      type === 'error' ? '#ef4444' :
+      type === 'warn' ? '#f59e0b' :
+      'var(--text-secondary)',
+    lineHeight: 1.5,
+  }),
+  logTime: {
+    color: 'var(--text-muted)',
+    flexShrink: 0,
+    userSelect: 'none' as const,
+  },
+};
