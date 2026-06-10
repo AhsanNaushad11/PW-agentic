@@ -11,7 +11,21 @@ const resources = {
       enqueueJob: 'Enqueue Job',
       queuing: 'Queuing...',
       fixtureDriven: 'Fixture Driven (Math Matrix)',
-      autonomousLearning: 'Autonomous Learning (Exploration)'
+      autonomousLearning: 'Autonomous Learning (Exploration)',
+      titleMain: 'PW Agentic',
+      titleSub: 'Automated SQA Harness',
+      workerWs: 'Worker WS:',
+      connected: 'Connected',
+      disconnected: 'Disconnected',
+      workerRam: 'Worker RAM:',
+      executionLogs: 'Execution Logs',
+      job: 'Job:',
+      none: 'None',
+      waitingForLogs: 'Waiting for logs...',
+      visionEvidence: 'Vision / OCR Evidence',
+      noEvidence: 'No evidence captured yet.',
+      workerStatus: 'Worker Status:',
+      terminalStateEvidence: 'Terminal State Evidence'
     }
   }
 };

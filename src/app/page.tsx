@@ -124,16 +124,16 @@ export default function Home() {
       {/* ── Header ──────────────────────────────────────────────────────── */}
       <header className="flex items-center justify-between px-6 py-3 bg-gray-800 border-b border-gray-700 shrink-0">
         <div className="flex items-center gap-3">
-          <span className="text-lg font-bold text-indigo-400 tracking-tight">⚡ PW Agentic</span>
-          <span className="text-xs text-gray-400 border-l border-gray-600 pl-3">Automated SQA Harness</span>
+          <span className="text-lg font-bold text-indigo-400 tracking-tight">⚡ {t('titleMain')}</span>
+          <span className="text-xs text-gray-400 border-l border-gray-600 pl-3">{t('titleSub')}</span>
         </div>
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2">
             <div className={`w-2 h-2 rounded-full ${wsConnected ? 'bg-green-500' : 'bg-red-500'}`} />
-            <span className="text-xs text-gray-400">Worker WS: {wsConnected ? 'Connected' : 'Disconnected'}</span>
+            <span className="text-xs text-gray-400">{t('workerWs')} {wsConnected ? t('connected') : t('disconnected')}</span>
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-xs text-gray-400">Worker RAM: {workerState.memoryUsageMb.toFixed(1)} MB</span>
+            <span className="text-xs text-gray-400">{t('workerRam')} {workerState.memoryUsageMb.toFixed(1)} MB</span>
           </div>
         </div>
       </header>
@@ -148,8 +148,9 @@ export default function Home() {
           </div>
 
           <div className="flex flex-col gap-1.5 shrink-0">
-            <label className="text-xs font-medium text-gray-400">{t('targetUrl')}</label>
+            <label htmlFor="targetUrl" className="text-xs font-medium text-gray-400">{t('targetUrl')}</label>
             <input
+              id="targetUrl"
               className="bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-sm font-mono focus:outline-none focus:border-indigo-500 transition-colors"
               type="url"
               placeholder="https://casino.example.com/game"
@@ -160,8 +161,9 @@ export default function Home() {
           </div>
 
           <div className="flex flex-col gap-1.5 shrink-0">
-            <label className="text-xs font-medium text-gray-400">{t('executionMode')}</label>
+            <label htmlFor="executionMode" className="text-xs font-medium text-gray-400">{t('executionMode')}</label>
             <select
+              id="executionMode"
               className="bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-sm focus:outline-none focus:border-indigo-500 transition-colors"
               value={mode}
               onChange={(e) => setMode(e.target.value)}
@@ -173,8 +175,9 @@ export default function Home() {
           </div>
 
           <div className="flex flex-col gap-1.5 shrink-0">
-            <label className="text-xs font-medium text-gray-400">{t('totalRounds')}</label>
+            <label htmlFor="totalRounds" className="text-xs font-medium text-gray-400">{t('totalRounds')}</label>
             <input
+              id="totalRounds"
               className="bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-sm font-mono focus:outline-none focus:border-indigo-500 transition-colors"
               type="number"
               min="1"
@@ -197,13 +200,13 @@ export default function Home() {
         {/* Middle Panel: Real-time Logs */}
         <section className="flex-[1.5] flex flex-col p-4 bg-gray-900 overflow-hidden">
           <div className="flex items-center justify-between pb-2 border-b border-gray-800 shrink-0">
-            <span className="text-xs font-semibold text-gray-400 uppercase tracking-widest">Execution Logs</span>
-            <span className="text-xs text-gray-500">Job: {activeJobId || 'None'}</span>
+            <span className="text-xs font-semibold text-gray-400 uppercase tracking-widest">{t('executionLogs')}</span>
+            <span className="text-xs text-gray-500">{t('job')} {activeJobId || t('none')}</span>
           </div>
 
           <div className="flex-1 overflow-y-auto mt-2 flex flex-col gap-1 font-mono text-[13px] bg-gray-800 p-3 rounded-md border border-gray-800">
             {logs.length === 0 ? (
-              <span className="text-gray-500">Waiting for logs...</span>
+              <span className="text-gray-500">{t('waitingForLogs')}</span>
             ) : (
               logs.map((entry, i) => (
                 <div key={i} className={`flex gap-3 leading-relaxed
@@ -223,7 +226,7 @@ export default function Home() {
         {/* Right Panel: Vision & Evidence */}
         <section className="flex-1 flex flex-col p-4 bg-gray-900 overflow-hidden">
           <div className="flex items-center justify-between pb-2 border-b border-gray-800 shrink-0">
-            <span className="text-xs font-semibold text-gray-400 uppercase tracking-widest">Vision / OCR Evidence</span>
+            <span className="text-xs font-semibold text-gray-400 uppercase tracking-widest">{t('visionEvidence')}</span>
           </div>
 
           <div className="flex-1 flex items-center justify-center mt-2 border border-dashed border-gray-700 rounded-md bg-gray-800 overflow-hidden relative">
@@ -231,16 +234,16 @@ export default function Home() {
               // eslint-disable-next-line @next/next/no-img-element
               <img 
                 src={`data:image/jpeg;base64,${screenshotBase64}`} 
-                alt="Terminal State Evidence" 
+                alt={t('terminalStateEvidence')} 
                 className="object-contain w-full h-full"
               />
             ) : (
-              <span className="text-gray-500 text-sm">No evidence captured yet.</span>
+              <span className="text-gray-500 text-sm">{t('noEvidence')}</span>
             )}
             
             {/* Overlay Status */}
             <div className="absolute top-2 right-2 bg-black/60 px-2 py-1 rounded text-xs text-gray-300 backdrop-blur-sm border border-gray-700">
-              Worker Status: <span className="text-white capitalize">{workerState.status}</span>
+              {t('workerStatus')} <span className="text-white capitalize">{workerState.status}</span>
             </div>
           </div>
         </section>
