@@ -10,13 +10,21 @@ export class BrowserManager {
    * 1. Initialization
    * Launches a visible Chromium instance and creates a new browsing context and page.
    */
-  public async initialize(): Promise<void> {
-    this.browser = await chromium.launch({
-      headless: false, // Hardcoded to false for debugging purposes per constraints
+  public async initialize(userAgent?: string): Promise<void> {
+    this.browser = await chromium.launch({ headless: false });
+    
+    // Fix: Inject userAgent if provided, otherwise default to a non-bot string
+    this.context = await this.browser.newContext({
+      userAgent: userAgent || 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
     });
     
-    this.context = await this.browser.newContext();
     this.page = await this.context.newPage();
+
+    // Fix: Dialog Handler (Kills freezes before they happen)
+    this.page.on('dialog', async (dialog) => {
+      console.warn(`[BrowserManager] Dialog detected and dismissed: ${dialog.message()}`);
+      await dialog.dismiss();
+    });
   }
   
   /**
@@ -25,17 +33,7 @@ export class BrowserManager {
    */
   public async loadGame(payload: SqaJobPayload): Promise<void> {
     if (!this.page || !this.context) {
-      throw new Error('BrowserManager is not initialized. Call initialize() before loading a game.');
-    }
-
-    // Warn if userAgentOverride was provided — it must be set at context creation
-    // time and cannot be changed after the fact. The caller should pass it to
-    // initialize() if a future refactor supports it.
-    if (payload.sessionContext?.userAgentOverride) {
-      console.warn(
-        `[BrowserManager] userAgentOverride was provided but cannot be applied after context creation. ` +
-        `Value ignored: "${payload.sessionContext.userAgentOverride}"`
-      );
+      throw new Error('BrowserManager not initialized.');
     }
 
     if (payload.sessionContext?.authToken) {
@@ -45,8 +43,11 @@ export class BrowserManager {
     }
 
     console.log(`[BrowserManager] Navigating to ${payload.targetUrl}...`);
+    
+    // Fix: networkidle is mandatory for WebGL games
     await this.page.goto(payload.targetUrl, {
-      waitUntil: 'domcontentloaded'
+      waitUntil: 'networkidle',
+      timeout: 60000 // 60s timeout for heavy canvas assets
     });
   }
 
