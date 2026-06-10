@@ -27,3 +27,7 @@ worker.on('completed', (job) => {
 worker.on('failed', (job, err) => {
   console.log(`Job ${job?.id} has failed with ${err.message}`);
 });
+
+worker.on('error', (err) => {
+  console.error(`Worker encountered an error: ${err.message}`);
+});
