@@ -28,7 +28,7 @@ export default function Dashboard() {
     const payload = {
       targetUrl: formData.targetUrl,
       gameMode: formData.gameMode,
-      config: {
+      executionParameters: { // Fixed: Matches Tier 2 strict validation
         targetRounds: formData.targetRounds,
         spinIntervalMs: formData.spinIntervalMs,
         maxMemoryThresholdMb: formData.maxMemoryThresholdMb,
