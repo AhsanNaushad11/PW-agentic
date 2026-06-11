@@ -8,7 +8,11 @@ import IORedis from 'ioredis';
 interface SqaJobPayload {
   targetUrl: string;
   gameMode: string;
-  executionParameters: Record<string, unknown>;
+  executionParameters: {
+    targetRounds: number;
+    spinIntervalMs: number;
+    maxMemoryThresholdMb: number;
+  };
 }
 
 /**
@@ -49,9 +53,16 @@ export async function POST(req: Request) {
     const payload: SqaJobPayload = await req.json();
 
     // Strict validation of payload structure
-    if (!payload.targetUrl || !payload.gameMode || !payload.executionParameters) {
+    if (
+      !payload.targetUrl ||
+      !payload.gameMode ||
+      !payload.executionParameters ||
+      typeof payload.executionParameters.targetRounds !== 'number' ||
+      typeof payload.executionParameters.spinIntervalMs !== 'number' ||
+      typeof payload.executionParameters.maxMemoryThresholdMb !== 'number'
+    ) {
       return NextResponse.json(
-        { success: false, error: 'Missing required fields: targetUrl, gameMode, or executionParameters' },
+        { success: false, error: 'Malformed payload: Missing required fields or invalid numeric parameters.' },
         { status: 400 }
       );
     }
