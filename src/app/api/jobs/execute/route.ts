@@ -8,11 +8,7 @@ import IORedis from 'ioredis';
 interface SqaJobPayload {
   targetUrl: string;
   gameMode: string;
-  executionParameters: {
-    targetRounds: number;
-    spinIntervalMs: number;
-    maxMemoryThresholdMb: number;
-  };
+  executionParameters: Record<string, unknown>;
 }
 
 /**
@@ -53,16 +49,9 @@ export async function POST(req: Request) {
     const payload: SqaJobPayload = await req.json();
 
     // Strict validation of payload structure
-    if (
-      !payload.targetUrl ||
-      !payload.gameMode ||
-      !payload.executionParameters ||
-      typeof payload.executionParameters.targetRounds !== 'number' ||
-      typeof payload.executionParameters.spinIntervalMs !== 'number' ||
-      typeof payload.executionParameters.maxMemoryThresholdMb !== 'number'
-    ) {
+    if (!payload.targetUrl || !payload.gameMode || !payload.executionParameters) {
       return NextResponse.json(
-        { success: false, error: 'Malformed payload: Missing required fields or invalid numeric parameters.' },
+        { error: 'Missing required fields: targetUrl, gameMode, or executionParameters' },
         { status: 400 }
       );
     }
@@ -81,7 +70,7 @@ export async function POST(req: Request) {
     console.error('[Tier 2] Enqueue Error:', error);
     const errorMessage = error instanceof Error ? error.message : 'Internal Server Error enqueuing job';
     return NextResponse.json(
-      { success: false, error: errorMessage },
+      { error: errorMessage },
       { status: 500 }
     );
   }
