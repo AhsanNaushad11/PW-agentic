@@ -1,3 +1,6 @@
+import * as dotenv from 'dotenv';
+dotenv.config();
+
 import { Worker } from 'bullmq';
 import IORedis from 'ioredis';
 import { WebSocketServer, WebSocket } from 'ws';
@@ -13,6 +16,14 @@ const connection = new IORedis({
   host: REDIS_HOST,
   port: REDIS_PORT,
   maxRetriesPerRequest: null,
+});
+
+connection.on('error', (err) => {
+  console.error(`[REDIS] Connection error: ${err.message}`);
+});
+
+connection.on('connect', () => {
+  console.log(`[REDIS] Connected to ${REDIS_HOST}:${REDIS_PORT}`);
 });
 
 // ─── WebSocket Server ────────────────────────────────────────────────────────
@@ -79,7 +90,11 @@ pingInterval = setInterval(() => {
     }
     
     pongReceived = false;
-    activeClient.send(JSON.stringify({ type: 'ping' }));
+    try {
+      activeClient.send(JSON.stringify({ type: 'ping' }));
+    } catch (e) {
+      console.error('[WS] Failed to send ping:', e);
+    }
   }
 }, 10000);
 
@@ -93,12 +108,45 @@ setInterval(() => {
   broadcastStatus('running', memoryUsageMb);
 }, 10000);
 
+// ─── Payload Translation Layer ───────────────────────────────────────────────
+// The API route (Tier 1) enqueues:
+//   { targetUrl, gameMode, executionParameters: { targetRounds, spinIntervalMs, maxMemoryThresholdMb } }
+//
+// The fixtureRunner (Tier 3) expects:
+//   { jobId, targetUrl, mode, config: { totalRounds, lowBalanceHaltThreshold, timing: { roundIntervalMs, visibilityWindowMs } } }
+//
+// This function bridges the contract gap without touching either endpoint.
+// ─────────────────────────────────────────────────────────────────────────────
+function translatePayload(jobId: string, raw: any) {
+  if (!raw || typeof raw !== 'object') {
+    throw new Error(`[VALIDATION] Job ${jobId} has a null or non-object payload.`);
+  }
+  if (!raw.targetUrl) {
+    throw new Error(`[VALIDATION] Job ${jobId} is missing required field: targetUrl.`);
+  }
+  const ep = raw.executionParameters || {};
+  return {
+    jobId,
+    targetUrl: raw.targetUrl,
+    mode: raw.gameMode,
+    config: {
+      totalRounds: ep.targetRounds ?? 1,
+      lowBalanceHaltThreshold: ep.lowBalanceHaltThreshold ?? 0,
+      timing: {
+        roundIntervalMs: ep.spinIntervalMs ?? 5000,
+        visibilityWindowMs: ep.visibilityWindowMs ?? 2500,
+      },
+    },
+  };
+}
+
 // ─── BullMQ Worker ───────────────────────────────────────────────────────────
 const worker = new Worker('sqa-jobs', async (job) => {
   broadcastLog('info', `Picked up job: ${job.id}`);
   
   try {
-    await executeJob(job.data);
+    const translatedData = translatePayload(job.id ?? 'unknown', job.data);
+    await executeJob(translatedData);
     broadcastLog('success', `Job ${job.id} completed.`);
   } catch (error: any) {
     broadcastLog('error', `Job ${job.id} failed: ${error.message}`);
@@ -112,4 +160,44 @@ worker.on('ready', () => {
 
 worker.on('error', (err) => {
   console.error('Worker Redis error:', err);
+});
+
+// ─── Graceful Shutdown ───────────────────────────────────────────────────────
+// When the process receives SIGTERM (VS Code Stop, systemd) or SIGINT (Ctrl+C),
+// we must close the worker gracefully. worker.close() waits for the currently
+// running job to finish, then disconnects from Redis. Without this, in-flight
+// jobs get stuck in the "active" state and Playwright browsers become zombies.
+// Redis (Tier 2) is NEVER touched — it runs as a system-level daemon.
+// ─────────────────────────────────────────────────────────────────────────────
+async function gracefulShutdown(signal: string): Promise<void> {
+  console.log(`\n[SHUTDOWN] Received ${signal}. Closing worker gracefully...`);
+  try {
+    if (pingInterval) clearInterval(pingInterval);
+    await worker.close();
+    await connection.quit();
+    wss.close();
+    console.log('[SHUTDOWN] Worker, Redis connection, and WebSocket closed cleanly.');
+  } catch (err) {
+    console.error('[SHUTDOWN] Error during graceful shutdown:', err);
+  } finally {
+    process.exit(0);
+  }
+}
+
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+
+// ─── Global Safety Net ───────────────────────────────────────────────────────
+// Last-resort handlers to log crashes that escape all other error handling.
+// These prevent silent process deaths in production.
+// ─────────────────────────────────────────────────────────────────────────────
+process.on('unhandledRejection', (reason) => {
+  console.error('[UNHANDLED REJECTION]', reason);
+});
+
+process.on('uncaughtException', (err) => {
+  console.error('[UNCAUGHT EXCEPTION]', err);
+  // Exit after logging — the process is in an unknown state and continuing
+  // could cause data corruption or zombie Playwright browsers.
+  process.exit(1);
 });

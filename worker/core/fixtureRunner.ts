@@ -17,6 +17,10 @@ interface JobData {
 }
 
 export async function executeJob(data: JobData) {
+  // Defensive: validate the deeply nested config structure before entering the loop
+  if (!data?.config?.timing) {
+    throw new Error(`[VALIDATION] Job ${data?.jobId} has malformed config — missing config.timing.`);
+  }
   const engine = new PlaywrightEngine();
   
   try {

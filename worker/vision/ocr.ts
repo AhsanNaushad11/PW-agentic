@@ -1,6 +1,18 @@
 import { GoogleGenAI, Type, HarmCategory, HarmBlockThreshold } from '@google/genai';
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+// DEFERRED: SDK is initialized at call-time, not module-load time,
+// to ensure dotenv.config() in the entry point has already executed.
+let _ai: GoogleGenAI | null = null;
+function getAiClient(): GoogleGenAI {
+  if (!_ai) {
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      throw new Error('[OCR] GEMINI_API_KEY is not set. Cannot initialize GoogleGenAI.');
+    }
+    _ai = new GoogleGenAI({ apiKey });
+  }
+  return _ai;
+}
 
 export interface OcrResult {
   isWin: boolean;
@@ -18,7 +30,7 @@ export async function parseTerminalState(screenshotBase64: string): Promise<OcrR
       - detectedWinAmount: the amount won in this round (0 if no win).
     `;
 
-    const response = await ai.models.generateContent({
+    const response = await getAiClient().models.generateContent({
       model: 'gemini-1.5-flash',
       contents: [
         {
