@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import ConsolePanel from '@/components/ConsolePanel';
 
 // =============================================================================
 // TIER 1: SQA HARNESS FRONTEND CONTROL PLANE
@@ -369,6 +370,11 @@ export default function Dashboard() {
           </div>
         </div>
       </footer>
+
+      {/* =================================================================== */}
+      {/* PANEL 4: EXECUTION CONSOLE — Real-time terminal logs                */}
+      {/* =================================================================== */}
+      <ConsolePanel />
     </div>
   );
 }
