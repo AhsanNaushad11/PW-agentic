@@ -300,17 +300,20 @@ export default function Dashboard() {
         </main>
 
         {/* =============================================================== */}
-        {/* PANEL 2: INTERACTION SIDEBAR — System Interventions             */}
+        {/* PANEL 2: INTERACTION SIDEBAR — System Logs & Interventions      */}
+        {/* Currently renders mock log entries. Will be replaced with a     */}
+        {/* real-time WebSocket or SSE feed from the Tier 3 Worker.         */}
         {/* =============================================================== */}
         <aside className="w-80 overflow-hidden flex flex-col bg-slate-900">
           <div className="p-4 border-b border-slate-700 shrink-0">
-            <h2 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">System Interventions</h2>
+            <h2 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">System Interventions &amp; Logs</h2>
           </div>
-          <div className="flex-1 p-4 flex flex-col gap-4 bg-black/20">
-            <div className="text-xs text-slate-500 italic text-center mt-4">
-              Waiting for manual intervention triggers (e.g., CAPTCHA, insufficient funds)...
-            </div>
-            {/* Future Manual Override Buttons will render here */}
+          <div className="flex-1 overflow-y-auto p-4 font-mono text-[11px] space-y-2 bg-black/20">
+            <div className="text-indigo-400">[08:42:01] SYSTEM: Initializing Playwright environment...</div>
+            <div className="text-slate-300">[08:42:03] WORKER_01: Redis connection established.</div>
+            <div className="text-slate-300">[08:42:05] WORKER_01: Waiting for job assignment...</div>
+            <div className="text-green-400">[08:42:10] SYSTEM: Tier 2 Queue is healthy.</div>
+            <div className="text-slate-500 italic">-- End of mock logs --</div>
           </div>
         </aside>
 

@@ -10,24 +10,15 @@ import { useConsoleStore } from '@/store/useConsoleStore';
  * Displays real-time logs from the Zustand store with auto-scroll and color-coding.
  */
 export const ConsolePanel: React.FC = () => {
-const { logs, clearLogs, addLog } = useConsoleStore(); // Ensure addLog is destructured  const scrollRef = useRef<HTMLDivElement>(null);
+  const { logs, clearLogs } = useConsoleStore();
+  const scrollRef = useRef<HTMLDivElement>(null);
 
-// WebSocket Listener isolated to the Panel
+  // Auto-scroll to bottom whenever logs change
   useEffect(() => {
-    const ws = new WebSocket('ws://localhost:5000');
-    
-    ws.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        addLog(data.level || 'info', data.message || event.data);
-      } catch (e) {
-        addLog('info', event.data); // Fallback for raw string logs
-      }
-    };
-
-    // CRITICAL: Clean up the socket on unmount to prevent Ghost connections
-    return () => ws.close();
-  }, [addLog]);
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [logs]);
 
   /**
    * Helper to determine text color based on log level.
