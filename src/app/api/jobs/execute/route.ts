@@ -148,20 +148,29 @@ function validatePayload(payload: unknown): string | null {
   }
 
   const params = data.executionParameters as Record<string, unknown>;
-  const numericFields: Array<{ key: string; min: number }> = [
-    { key: 'targetRounds', min: 1 },
-    { key: 'spinIntervalMs', min: 3000 },
-    { key: 'maxMemoryThresholdMb', min: 256 },
-  ];
 
-  for (const { key, min } of numericFields) {
-    const value = params[key];
-    if (typeof value !== 'number' || !Number.isFinite(value)) {
-      return `executionParameters.${key} must be a finite number.`;
-    }
-    if (value < min) {
-      return `executionParameters.${key} must be >= ${min}. Received: ${value}.`;
-    }
+  const targetRounds = params['targetRounds'];
+  if (typeof targetRounds !== 'number' || !Number.isFinite(targetRounds)) {
+    return 'executionParameters.targetRounds must be a finite number.';
+  }
+  if (targetRounds < 1) {
+    return `executionParameters.targetRounds must be >= 1. Received: ${targetRounds}.`;
+  }
+
+  const spinIntervalMs = params['spinIntervalMs'];
+  if (typeof spinIntervalMs !== 'number' || !Number.isFinite(spinIntervalMs)) {
+    return 'executionParameters.spinIntervalMs must be a finite number.';
+  }
+  if (spinIntervalMs < 3000) {
+    return `executionParameters.spinIntervalMs must be >= 3000. Received: ${spinIntervalMs}.`;
+  }
+
+  const maxMemoryThresholdMb = params['maxMemoryThresholdMb'];
+  if (typeof maxMemoryThresholdMb !== 'number' || !Number.isFinite(maxMemoryThresholdMb)) {
+    return 'executionParameters.maxMemoryThresholdMb must be a finite number.';
+  }
+  if (maxMemoryThresholdMb < 256) {
+    return `executionParameters.maxMemoryThresholdMb must be >= 256. Received: ${maxMemoryThresholdMb}.`;
   }
 
   return null; // Payload is valid.
