@@ -1,0 +1,28 @@
+{
+  // ==========================================================================
+  // PW-AGENTIC: VS Code Task Definitions
+  // ==========================================================================
+  // Pre-flight tasks for the 3-Tier SQA Harness.
+  // Tier 2 (Redis) is a persistent background daemon — these tasks ensure
+  // it is alive before any Node process attempts to connect via BullMQ.
+  // ==========================================================================
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Verify Redis",
+      "detail": "Pre-flight: Ensures Redis is alive on port 6379 (native or Docker fallback)",
+      "type": "shell",
+      "command": "if redis-cli -p 6379 ping 2>/dev/null | grep -q PONG; then echo '✅ Redis is already running on port 6379'; else echo '⚠️  Redis not detected on port 6379. Attempting to start...'; if command -v redis-server > /dev/null 2>&1; then redis-server --daemonize yes --port 6379 && sleep 1; if redis-cli -p 6379 ping 2>/dev/null | grep -q PONG; then echo '✅ Redis started natively on port 6379'; else echo '❌ Failed to start native Redis' && exit 1; fi; elif command -v docker > /dev/null 2>&1; then (docker start sqa_redis 2>/dev/null || docker run -d --name sqa_redis -p 6379:6379 redis:alpine) && sleep 2 && echo '✅ Redis started via Docker on port 6379'; else echo '❌ Neither redis-server nor docker found. Cannot start Redis.' && exit 1; fi; fi",
+      "presentation": {
+        "reveal": "silent",
+        "panel": "shared",
+        "clear": false
+      },
+      "problemMatcher": [],
+      "isBackground": false,
+      "runOptions": {
+        "instanceLimit": 1
+      }
+    }
+  ]
+}
