@@ -45,7 +45,8 @@ export const useConsoleStore = create<ConsoleState>((set) => ({
     };
 
     set((state) => ({
-      logs: [...state.logs, newLog],
+      // Only keep the most recent 200 logs to prevent memory exhaustion
+      logs: [...state.logs, newLog].slice(-200),
     }));
   },
 
