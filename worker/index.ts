@@ -34,13 +34,16 @@ let pingInterval: NodeJS.Timeout | null = null;
 let pongReceived = true;
 let missedPongs = 0;
 
-wss.on('connection', (ws) => {
+wss.on('connection', (ws: WebSocket) => {
   console.log('Frontend connected to Worker WS.');
+  if (activeClient && activeClient !== ws && activeClient.readyState === WebSocket.OPEN) {
+    activeClient.close();
+  }
   activeClient = ws;
   pongReceived = true;
   missedPongs = 0;
 
-  ws.on('message', (message) => {
+  ws.on('message', (message: any) => {
     try {
       const data = JSON.parse(message.toString());
       if (data.type === 'pong') {
@@ -99,7 +102,8 @@ pingInterval = setInterval(() => {
 }, 10000);
 
 // Memory Protection Check (Every 10s roughly, could also be per-spin)
-setInterval(() => {
+export let memoryInterval: NodeJS.Timeout | null = null;
+memoryInterval = setInterval(() => {
   const memoryUsageMb = process.memoryUsage().rss / 1024 / 1024;
   if (memoryUsageMb > MEMORY_LIMIT_MB) {
     broadcastLog('error', `CRITICAL: Memory exceeded 1.5GB (${memoryUsageMb.toFixed(1)}MB). Aborting to prevent crash.`);
@@ -173,6 +177,7 @@ async function gracefulShutdown(signal: string): Promise<void> {
   console.log(`\n[SHUTDOWN] Received ${signal}. Closing worker gracefully...`);
   try {
     if (pingInterval) clearInterval(pingInterval);
+    if (memoryInterval) clearInterval(memoryInterval);
     await worker.close();
     await connection.quit();
     wss.close();

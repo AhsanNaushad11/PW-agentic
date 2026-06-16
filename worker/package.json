@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@google/genai": "^2.8.0",
+    "@google/generative-ai": "^0.24.1",
     "@u4/opencv4nodejs": "^6.5.3",
     "bullmq": "^5.12.11",
     "dotenv": "^16.6.1",
