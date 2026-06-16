@@ -31,13 +31,15 @@ export async function parseTerminalState(screenshotBase64: string): Promise<OcrR
     `;
 
     const response = await getAiClient().models.generateContent({
-      model: 'gemini-1.5-flash',
+      model: 'gemini-2.5-pro',
       contents: [
         {
           role: 'user',
           parts: [
             { text: prompt },
             {
+              // YES, this is exactly where Gemini receives and reads your screenshot!
+              // The base64 image data is passed directly into the model here.
               inlineData: {
                 mimeType: 'image/jpeg',
                 data: screenshotBase64,

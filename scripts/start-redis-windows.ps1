@@ -17,8 +17,8 @@ $REDIS_DIR = Join-Path $WORKSPACE_ROOT ".redis-win"
 $REDIS_SERVER = Join-Path $REDIS_DIR "redis-server.exe"
 #$REDIS_CLI = Join-Path $REDIS_DIR "redis-cli.exe"
 $REDIS_ZIP = Join-Path $REDIS_DIR "redis.zip"
-$REDIS_VERSION = "5.0.14.1"
-$REDIS_URL = "https://github.com/tporadowski/redis/releases/download/v${REDIS_VERSION}/Redis-x64-${REDIS_VERSION}.zip"
+$REDIS_VERSION = "7.2.4"
+$REDIS_URL = "https://github.com/redis-windows/redis-windows/releases/download/${REDIS_VERSION}/Redis-${REDIS_VERSION}-Windows-x64-msys2.zip"
 
 # --- Step 1: Check if Redis is already running ---
 function Test-RedisAlive {
@@ -39,6 +39,12 @@ if (Test-RedisAlive) {
 
 Write-Host "[WARN] Redis not detected on port $REDIS_PORT." -ForegroundColor Yellow
 
+# --- Dynamic Discovery ---
+$serverExe = Get-ChildItem -Path $REDIS_DIR -Filter "redis-server.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+if ($serverExe) {
+    $REDIS_SERVER = $serverExe.FullName
+}
+
 # --- Step 2: Download portable Redis if not present ---
 if (-Not (Test-Path -LiteralPath $REDIS_SERVER)) {
     Write-Host "[INFO] Downloading portable Redis for Windows ($REDIS_VERSION)..." -ForegroundColor Cyan
@@ -57,6 +63,12 @@ if (-Not (Test-Path -LiteralPath $REDIS_SERVER)) {
 
     # Remove zip to save space
     Remove-Item -LiteralPath $REDIS_ZIP -Force -ErrorAction SilentlyContinue
+
+    # Re-discover dynamically
+    $serverExe = Get-ChildItem -Path $REDIS_DIR -Filter "redis-server.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($serverExe) {
+        $REDIS_SERVER = $serverExe.FullName
+    }
 
     if (-Not (Test-Path -LiteralPath $REDIS_SERVER)) {
         Write-Host "[ERROR] Failed to extract Redis. redis-server.exe not found at $REDIS_SERVER" -ForegroundColor Red

@@ -58,3 +58,6 @@ next-env.d.ts
 
 # Windows portable Redis (downloaded by scripts/start-redis-windows.ps1)
 /.redis-win/
+
+# Screenshot evidence captured by the worker (fixtureRunner.ts)
+/evidence_programmer/

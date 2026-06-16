@@ -1,5 +1,17 @@
 import * as dotenv from 'dotenv';
-dotenv.config();
+import * as path from 'path';
+
+// Force dotenv to load the Next.js .env.local file from the root directory
+dotenv.config({ path: path.resolve(__dirname, '../.env.local') });
+
+if (!process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEY === 'your_api_key_here') {
+  console.error('\n======================================================');
+  console.error('[CRITICAL] Missing or invalid GEMINI_API_KEY!');
+  console.error('Please put your real Gemini API key in the .env.local file');
+  console.error('at the root of your project, otherwise the OCR will fail');
+  console.error('with a "Writer has been released" network stream error.');
+  console.error('======================================================\n');
+}
 
 import { Worker } from 'bullmq';
 import IORedis from 'ioredis';
@@ -19,6 +31,10 @@ const connection = new IORedis({
 });
 
 connection.on('error', (err) => {
+  // Swallow the SETINFO error which is caused by older Redis v5 instances (like the Windows port)
+  // not supporting ioredis's client metadata telemetry. It is harmless.
+  if (err.message.includes('SETINFO')) return;
+  
   console.error(`[REDIS] Connection error: ${err.message}`);
 });
 

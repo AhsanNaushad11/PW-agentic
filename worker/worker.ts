@@ -26,6 +26,7 @@ const connection = new IORedis({
 // an 'error' event. Without this listener the process crashes silently with
 // an unhandled error.
 connection.on('error', (err) => {
+  if (err.message.includes('SETINFO')) return;
   console.error(`[REDIS] Connection error: ${err.message}`);
 });
 
