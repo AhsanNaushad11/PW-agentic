@@ -115,6 +115,7 @@ export class GeminiVisionProvider {
       // and Buffers can cause GC pressure spikes. While Node automatically frees
       // these when the function scope closes, explicitly nulling them ensures 
       // V8 can reap them immediately if the worker gets stuck on other async tasks.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       imageBuffer = null as any;
     }
   }

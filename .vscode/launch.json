@@ -1,0 +1,132 @@
+{
+  // ==========================================================================
+  // PW-AGENTIC: VS Code Launch & Debug Configurations
+  // ==========================================================================
+  // Orchestrates the 3-Tier SQA Harness:
+  //   Tier 1: Next.js UI Control Plane       (Port 3000, workspace root)
+  //   Tier 2: Redis/BullMQ Job Queue          (Port 6379, persistent daemon)
+  //   Tier 3: Node.js Execution Worker        (Port 5000, /worker directory)
+  //
+  // LIFECYCLE SAFETY:
+  //   - "stopAll: true" on compounds kills Tier 1 + Tier 3 cleanly.
+  //   - Tier 2 (Redis) is a background daemon — VS Code NEVER manages its
+  //     lifecycle. It is only verified via the "Verify Redis" preLaunchTask.
+  //   - Zombie Playwright browsers are killed when the Tier 3 process exits
+  //     because the worker's cleanup() handler fires on SIGTERM.
+  //
+  // DEBUGGER MODES:
+  //   - DEBUG compounds use "node-terminal" which auto-attaches the Node.js
+  //     debugger to all child processes (Next.js, ts-node, Playwright).
+  //   - RELEASE compounds use "node" type with autoAttachChildProcesses
+  //     disabled, so the app runs at full speed with no debugger overhead.
+  // ==========================================================================
+  "version": "0.2.0",
+  "configurations": [
+    // -----------------------------------------------------------------------
+    // DEBUG CONFIGURATIONS (Debugger Auto-Attached)
+    // -----------------------------------------------------------------------
+    {
+      "name": "DEBUG: Tier 1 — Next.js Frontend",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": "npm run dev",
+      "cwd": "${workspaceFolder}",
+      "preLaunchTask": "Verify Redis",
+      "presentation": {
+        "group": "debug-stack",
+        "order": 1
+      }
+    },
+    {
+      "name": "DEBUG: Tier 3 — Execution Worker",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": "npm run dev",
+      "cwd": "${workspaceFolder}/worker",
+      "preLaunchTask": "Verify Redis",
+      "presentation": {
+        "group": "debug-stack",
+        "order": 2
+      }
+    },
+
+    // -----------------------------------------------------------------------
+    // RELEASE CONFIGURATIONS (Debugger Detached)
+    // -----------------------------------------------------------------------
+    // These use "type": "node" with autoAttachChildProcesses: false.
+    // The debugger technically attaches to the npm wrapper process, but
+    // does NOT propagate to the actual Next.js or ts-node child processes.
+    // This gives full production-speed execution with zero debug overhead
+    // on the application code.
+    // -----------------------------------------------------------------------
+    {
+      "name": "RELEASE: Tier 1 — Next.js Frontend",
+      "type": "node",
+      "request": "launch",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "autoAttachChildProcesses": false,
+      "skipFiles": ["<node_internals>/**"],
+      "preLaunchTask": "Verify Redis",
+      "presentation": {
+        "group": "release-stack",
+        "order": 1
+      }
+    },
+    {
+      "name": "RELEASE: Tier 3 — Execution Worker",
+      "type": "node",
+      "request": "launch",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "cwd": "${workspaceFolder}/worker",
+      "console": "integratedTerminal",
+      "autoAttachChildProcesses": false,
+      "skipFiles": ["<node_internals>/**"],
+      "preLaunchTask": "Verify Redis",
+      "presentation": {
+        "group": "release-stack",
+        "order": 2
+      }
+    }
+  ],
+
+  // =========================================================================
+  // COMPOUND CONFIGURATIONS
+  // =========================================================================
+  // stopAll: true ensures the VS Code Stop button (Shift+F5) terminates
+  // BOTH Tier 1 and Tier 3 simultaneously. This prevents orphaned
+  // Playwright browser processes from surviving a partial shutdown.
+  //
+  // Tier 2 (Redis) is NEVER affected — it runs as a system-level daemon
+  // outside VS Code's process tree.
+  // =========================================================================
+  "compounds": [
+    {
+      "name": "DEBUG: Full 3-Tier Stack",
+      "configurations": [
+        "DEBUG: Tier 1 — Next.js Frontend",
+        "DEBUG: Tier 3 — Execution Worker"
+      ],
+      "stopAll": true,
+      "presentation": {
+        "group": "compounds",
+        "order": 1
+      }
+    },
+    {
+      "name": "RELEASE: Full 3-Tier Stack",
+      "configurations": [
+        "RELEASE: Tier 1 — Next.js Frontend",
+        "RELEASE: Tier 3 — Execution Worker"
+      ],
+      "stopAll": true,
+      "presentation": {
+        "group": "compounds",
+        "order": 2
+      }
+    }
+  ]
+}
