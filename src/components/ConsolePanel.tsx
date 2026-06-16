@@ -10,16 +10,27 @@ import { useConsoleStore } from '@/store/useConsoleStore';
  * Displays real-time logs from the Zustand store with auto-scroll and color-coding.
  */
 export const ConsolePanel: React.FC = () => {
-const { logs, clearLogs, addLog } = useConsoleStore(); // Ensure addLog is destructured  const scrollRef = useRef<HTMLDivElement>(null);
+  const { logs, clearLogs, addLog } = useConsoleStore();
 
-// WebSocket Listener isolated to the Panel
+  // WebSocket Listener isolated to the Panel
   useEffect(() => {
     const ws = new WebSocket('ws://localhost:5000');
-    
+
     ws.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
-        addLog(data.level || 'info', data.message || event.data);
+        
+        // 1. Respond to Worker heartbeats
+        if (data.type === 'ping') {
+          ws.send(JSON.stringify({ type: 'pong' }));
+          return;
+        }
+        
+        // 2. Only print actual logs to the console
+        if (data.type === 'log') {
+          addLog(data.level || 'info', data.message);
+        }
+        // Ignore 'status' and 'screenshot' types here (they are handled by other components)
       } catch (e) {
         addLog('info', event.data); // Fallback for raw string logs
       }
@@ -44,7 +55,15 @@ const { logs, clearLogs, addLog } = useConsoleStore(); // Ensure addLog is destr
         return 'text-gray-300';
     }
   };
+  // 1. Declare the missing ref
+  const scrollRef = useRef<HTMLDivElement>(null);
 
+  // 2. Add the auto-scroll effect so the terminal behaves like a real console
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [logs]);
   return (
     <div className="w-full bg-gray-950 border border-gray-800 rounded-t-xl shadow-2xl flex flex-col h-48 md:h-64 lg:h-80 overflow-hidden transition-all duration-300">
       {/* Sticky Header */}

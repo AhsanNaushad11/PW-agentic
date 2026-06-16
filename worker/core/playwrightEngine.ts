@@ -7,7 +7,7 @@ export class PlaywrightEngine {
   private page: Page | null = null;
   private deadManSwitchTimeout: NodeJS.Timeout | null = null;
 
-  async init(headless: boolean = true) {
+  async init(headless: boolean = false) {
     broadcastLog('info', `Initializing Playwright (headless: ${headless})`);
     this.browser = await chromium.launch({ headless });
     this.context = await this.browser.newContext();

@@ -1,0 +1,25 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Verify Redis",
+      "detail": "Pre-flight: Ensures Redis is alive on port 6379 (downloads portable Redis if needed)",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-ExecutionPolicy", "Bypass",
+        "-File", "${workspaceFolder}\\scripts\\start-redis-windows.ps1"
+      ],
+      "presentation": {
+        "reveal": "silent",
+        "panel": "shared",
+        "clear": false
+      },
+      "problemMatcher": [],
+      "isBackground": false,
+      "runOptions": {
+        "instanceLimit": 1
+      }
+    }
+  ]
+}

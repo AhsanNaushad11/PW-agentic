@@ -27,7 +27,7 @@ export async function executeJob(data: JobData) {
     broadcastLog('info', `Starting fixture execution for ${data.jobId} (Mode: ${data.mode})`);
     
     // 1. Init browser
-    await engine.init(true); // Headless mode by default
+    await engine.init(false); // Force headful mode so the browser UI is visible
     
     // 2. Navigate
     await engine.navigate(data.targetUrl);

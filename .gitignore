@@ -55,3 +55,6 @@ next-env.d.ts
 
 # leftover scaffold subfolder (safe to delete)
 /pw-agentic/
+
+# Windows portable Redis (downloaded by scripts/start-redis-windows.ps1)
+/.redis-win/
