@@ -52,14 +52,14 @@ export async function executeJob(data: JobData) {
   const engine = new PlaywrightEngine();
 
   // ── Evidence Directory Setup ───────────────────────────────────────────
-  // Each job gets its own timestamped folder inside evidence_programmer/
+  // Each job gets its own timestamped folder inside worker/evidence/
   // so that screenshots from different jobs never collide.
   // The timestamp uses ISO format with colons and dots replaced by dashes
   // because Windows does not allow those characters in directory names.
   let evidenceDir: string;
   try {
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    evidenceDir = path.resolve(__dirname, `../../evidence_programmer/evidence_${data.jobId}_${timestamp}`);
+    evidenceDir = path.resolve(__dirname, `../evidence/evidence_${data.jobId}_${timestamp}`);
     if (!fs.existsSync(evidenceDir)) {
       fs.mkdirSync(evidenceDir, { recursive: true });
     }
@@ -209,7 +209,7 @@ export async function executeJob(data: JobData) {
 // a headful Chromium browser via Playwright, and drives an automated spin loop
 // against a target casino game URL. On each round, it triggers a spin action,
 // waits for the animation to settle, captures a screenshot of the terminal
-// state, saves it to disk inside the evidence_programmer/ directory for
+// state, saves it to disk inside the worker/evidence/ directory for
 // forensic auditing, and then sends the image to Google's Gemini 2.5 Pro
 // model for OCR extraction of financial metrics (balance, bet, win amount).
 // It enforces two levels of safety: soft assertions that log data consistency
